@@ -37,7 +37,7 @@ set(AVR_EX_FUSE 0×05)
 set(MCU_SPEED "16000000UL")
 
 ### printf support
-#set(EXTRA_FLAGS "-Wl,-u,vfprintf -lprintf_min") 
+set(EXTRA_FLAGS "-Wl,-u,vfprintf -lprintf_min")
 
 ### END TOOLCHAIN SETUP AREA #############################################
 INCLUDE(generic-gcc-avr.cmake)
@@ -65,9 +65,9 @@ add_avr_executable(
 
 find_library(C_LIB c)
 message(STATUS "avr-libc: ${C_LIB}")
-
 avr_target_link_libraries(${PROJECT_NAME} ${C_LIB})
 
+avr_target_link_libraries(${PROJECT_NAME} m)
 
 ##################################################################################
 # add AVR library

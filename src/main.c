@@ -33,7 +33,7 @@
 
 static const uint8_t PWM_PIN = PD3;     // PWM output
 
-//static const uint8_t EN_PIN = ADCL7;     // A/B switch condition
+//static const uint8_t EN_PIN = ADC7;     // A/B switch condition
 static const uint8_t CS_PIN = PC6;     // current detection pin
 static const uint8_t INA_PIN = PC4;    // A switch control pin
 static const uint8_t INB_PIN = PC5;    // B switch control pin
@@ -42,6 +42,29 @@ static const uint8_t BUTTON_PIN = PD2;    // the number of the pushbutton pin
 
 uint8_t buttonState = 0;
 
+enum motor_state {
+    STATE_STOP_1,
+    STATE_MOVEMENT_FORWARD,
+    STATE_STOP_2,
+    STATE_MOVEMENT_BACKWARD,
+};
+
+const char* motor_state_string[] = {
+        [STATE_STOP_1] = "STATE_STOP_1",
+        [STATE_MOVEMENT_FORWARD] = "STATE_MOVEMENT_FORWARD",
+        [STATE_STOP_2] = "STATE_STOP_2",
+        [STATE_MOVEMENT_BACKWARD] = "STATE_MOVEMENT_BACKWARD",
+};
+
+#define MOTOR_GO(new_state) \
+	{ \
+		printf("FSM: -> " #new_state); \
+		printf("\n"); \
+		motor_state = new_state; \
+		break; \
+	}
+
+enum motor_state motor_state;
 
 
 ISR(INT0_vect) // debounce
@@ -51,7 +74,7 @@ ISR(INT0_vect) // debounce
             if (buttonState) {
                 TIMSK2  = (0 << OCIE0A); //Output Compare A Match Interrupt Disable
                 TCNT2   = 0; //timer reset
-                fprintf(stderr, "PIN : 1 BS: 1\n");
+                fprintf(stderr, "PIN : 1 BS: \n");
             }
             else {
                 TIMSK2  = (1 << OCIE0A); //Output Compare A Match Interrupt Enable
@@ -82,20 +105,52 @@ ISR(TIMER2_COMPA_vect) // debounce
             buttonState = !buttonState;
             TIMSK2  = (0 << OCIE0A); //Output Compare A Match Interrupt Disable
             TCNT2   = 0; //timer reset
-            fprintf(stderr, "change button state: ");
+            fprintf(stderr, "change button state: %d", buttonState);
             USART_Put_Char(buttonState + '0', stdout);
             USART_Put_Char('\n', stdout);
+            switch (motor_state) {
+                case STATE_STOP_1:
+                    MOTOR_GO(STATE_MOVEMENT_FORWARD);
+                case STATE_MOVEMENT_FORWARD:
+                    break;
+                case STATE_STOP_2:
+                    break;
+                case STATE_MOVEMENT_BACKWARD:
+                    MOTOR_GO(STATE_MOVEMENT_FORWARD);
+            }
         }
 }
 ISR(TIMER0_COMPA_vect) //
 {
         static uint16_t cycles_counter = 0;
         if (cycles_counter == (uint16_t)MS_TO_CLOCKS(1000, (uint16_t)PRES0 * MY_OCR0)) {
-
+            switch (motor_state) {
+                case STATE_STOP_1:
+                    break;
+                case STATE_MOVEMENT_FORWARD:
+                    MOTOR_GO(STATE_STOP_2);
+                case STATE_STOP_2:
+                    break;
+                case STATE_MOVEMENT_BACKWARD:
+                    MOTOR_GO(STATE_STOP_1);
+            }
         }
         if (cycles_counter == MS_TO_CLOCKS(500, PRES0 * MY_OCR0)) {
-
+            switch (motor_state) {
+                case STATE_STOP_1:
+                case STATE_MOVEMENT_FORWARD: MOTOR_GO(STATE_STOP_2);
+                case STATE_STOP_2:
+                case STATE_MOVEMENT_BACKWARD: MOTOR_GO(STATE_STOP_1);
+            }
         }
+}
+
+ISR(ADC_vect)
+{
+    uint16_t data;
+    data    = (ADCH << 8)
+            | ADCL;
+    printf("ADC: %d\n", data);
 }
 
 void setup_io()
@@ -136,7 +191,13 @@ void setup_timers()
     TIMSK2  = (1 << OCIE0A);
 }
 
-
+void setup_ADC()
+{
+    ADMUX   = (1 << REFS1) | (1 << REFS0) // 1.1V reference
+            | (0 << MUX3)  | (1 << MUX2) | (1 << MUX1) | (1 << MUX0); // ADC7
+    ADCSRA  = (1 << ADEN)  | (1 << ADSC) // ADC Enable, start conversion
+            | (1 << ADPS2) | (0 << ADPS1) | (1 << ADPS0); // division factor 32
+}
 
 int main(void)
 {
@@ -153,6 +214,7 @@ int main(void)
     EICRA |= (0 << ISC01) | (1 << ISC00);
 
     setup_timers();
+    setup_ADC();
     sei();
     fprintf(stdout, "hello ");
     fprintf(stdout, "world\n");
@@ -161,6 +223,7 @@ int main(void)
 
     while (true) {
         sleep_cpu();
+
     }
 
 

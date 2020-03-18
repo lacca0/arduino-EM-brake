@@ -16,8 +16,6 @@ void USART_Init(unsigned int ubrr)
     /* Set frame format: 8data, 1stop bit */
     UCSR0C =   (0 << USBS0) | (3 << UCSZ00)
                | (0 << U2X0) | (0 << UMSEL00) | (0 << UMSEL01); // divider 16, asynchronous
-
-
 }
 
 void USART_Transmit(char data)
@@ -45,7 +43,6 @@ uint8_t USART_Receive(enum uart_error *error)
         }
     }
     return UDR0;
-
 }
 
 void USART_Transmit_string(char string[])
