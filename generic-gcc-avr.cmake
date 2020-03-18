@@ -86,9 +86,9 @@ if(NOT AVR_UPLOADTOOL_PORT)
 endif(NOT AVR_UPLOADTOOL_PORT)
 
 if(AVR_UPLOADTOOL_BITRATE)
-   set(AVR_UPLOADTOOL_BITRATE_CMD "-b ${AVR_UPLOADTOOL_BITRATE}")
+   set(AVR_UPLOADTOOL_BITRATE_CMD -b "${AVR_UPLOADTOOL_BITRATE}")
 else(AVR_UPLOADTOOL_BITRATE)
-   set(AVR_UPLOADTOOL_BITRATE_CMD "")
+   set(AVR_UPLOADTOOL_BITRATE_CMD)
 endif(AVR_UPLOADTOOL_BITRATE)
 
 # default programmer (hardware)
@@ -231,7 +231,7 @@ function(add_avr_executable EXECUTABLE_NAME)
    # upload - with avrdude
    add_custom_target(
       upload_${EXECUTABLE_NAME}
-      ${AVR_UPLOADTOOL} -p ${AVR_MCU} -c ${AVR_PROGRAMMER} ${AVR_UPLOADTOOL_OPTIONS}
+      ${AVR_UPLOADTOOL} -v -p ${AVR_MCU} -c ${AVR_PROGRAMMER} ${AVR_UPLOADTOOL_OPTIONS}
          -U flash:w:${hex_file}
          -P ${AVR_UPLOADTOOL_PORT} ${AVR_UPLOADTOOL_BITRATE_CMD}
       DEPENDS ${hex_file}
@@ -435,8 +435,8 @@ if(CMAKE_BUILD_TYPE MATCHES RelWithDebInfo)
 endif(CMAKE_BUILD_TYPE MATCHES RelWithDebInfo)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-   set(CMAKE_C_FLAGS_DEBUG "-O0 -save-temps -g -gdwarf-3 -gstrict-dwarf")
-   set(CMAKE_CXX_FLAGS_DEBUG "-O0 -save-temps -g -gdwarf-3 -gstrict-dwarf")
+   set(CMAKE_C_FLAGS_DEBUG "-Og -save-temps -g -gdwarf-3 -gstrict-dwarf")
+   set(CMAKE_CXX_FLAGS_DEBUG "-Og -save-temps -g -gdwarf-3 -gstrict-dwarf")
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 ##################################################################################

@@ -1,0 +1,1 @@
+avrdude -v -p atmega328p -c arduino -P /dev/ttyUSB1 -b 57600 -D -U flash:w:/home/lacca/Документы/1IT/железки/karfidov/code/cmake-build-debug/code-atmega328p.hex:i
