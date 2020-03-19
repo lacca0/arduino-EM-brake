@@ -22,7 +22,7 @@
 #define BAUD 57600
 #define MY_UBRR F_CPU/16/BAUD - 1
 
-#define MS_TO_CLOCKS(ms, PRES)  ((((uint32_t)(ms) * (uint32_t)F_CPU) /  (1000 * (uint32_t)(PRES))))
+#define MS_TO_CLOCKS(ms, PRES)  ((((uint64_t)(ms) * (uint64_t)F_CPU) /  ((uint64_t)1000 * (PRES))))
 #define MY_OCR0  MS_TO_CLOCKS(10, PRES0) - 1 // the real (actual) period between comparator trigger events is OCRn + 1, so subtract one
 #define MY_OCR2  MS_TO_CLOCKS(10, PRES2) - 1 // the real (actual) period between comparator trigger events is OCRn + 1, so subtract one
 
