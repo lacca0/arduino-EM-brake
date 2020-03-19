@@ -41,9 +41,12 @@ static const uint8_t INB_PIN = PC5;    // B switch control pin
 static const uint8_t BUTTON_PIN = PD2;    // the number of the pushbutton pin
 
 volatile uint8_t buttonState = 0;
-//static const uint8_t currentThreshold = 40;
+
 uint16_t timer0_counter = 0;
 uint16_t timer2_counter = 0;
+
+uint16_t current_min = 0;
+uint16_t current_max = 0;
 
 enum motor_state {
     STATE_STOP_BACK,
@@ -130,7 +133,7 @@ ISR(TIMER0_COMPA_vect) //
 {
     timer0_counter++;
     printf("timer0: counter = %d\n", timer0_counter);
-    if (timer0_counter == MS_TO_CLOCKS(2000, PRES0 * MY_OCR0)) {
+    if (timer0_counter == MS_TO_CLOCKS(1000, PRES0 * MY_OCR0)) {
         switch (motor_state) {
             case STATE_STOP_BACK:
                 break;
@@ -143,29 +146,59 @@ ISR(TIMER0_COMPA_vect) //
         }
         timer0_stop();
     }
-    if (timer0_counter == MS_TO_CLOCKS(500, PRES0 * MY_OCR0)) {
+
+    if ((timer0_counter >= MS_TO_CLOCKS(50, PRES0 * MY_OCR0))
+     && (current_min > (current_max >> 2))) { // current_max * 0.5
+        printf("LOCKED -- EMERGENCY STOP (min = %u, max = %u within 50 ms)", current_min, current_max);
         switch (motor_state) {
             case STATE_STOP_BACK:
                 break;
             case STATE_MOVEMENT_FORWARD:
-                can_read_ADC = 1;
-                break;
+                MOTOR_GO(STATE_STOP_FRONT);
             case STATE_STOP_FRONT:
                 break;
             case STATE_MOVEMENT_BACKWARD:
-                can_read_ADC = 1;
-                break;
+                MOTOR_GO(STATE_STOP_BACK);
         }
+        timer0_stop();
     }
 }
 
 ISR(ADC_vect)
 {
+    static uint8_t current_sense_ctr = 0;
+
     uint16_t data;
     data  = ADCL;
     data |= ADCH << 8;
-    if (motor_state == STATE_MOVEMENT_FORWARD || motor_state == STATE_MOVEMENT_BACKWARD) {
-        printf("ADC: %d\n", data);
+
+    if (data < current_min) {
+        current_min = data;
+    }
+    if (data > current_max) {
+        current_max = data;
+    }
+
+    if (data > (current_min + (current_min >> 1) + (current_min >> 2))) { // current_min * 1.75
+        ++current_sense_ctr;
+        printf("current sense alert (min = %u, current = %u)\n", current_min, data);
+    } else {
+        current_sense_ctr = 0;
+    }
+
+    if (current_sense_ctr >= 3) {
+        printf("stopping by current sense (alert for last 3 measurements)\n");
+        switch (motor_state) {
+            case STATE_STOP_BACK:
+                break;
+            case STATE_MOVEMENT_FORWARD:
+                MOTOR_GO(STATE_STOP_FRONT);
+            case STATE_STOP_FRONT:
+                break;
+            case STATE_MOVEMENT_BACKWARD:
+                MOTOR_GO(STATE_STOP_BACK);
+        }
+        current_sense_ctr = 0;
     }
 }
 
@@ -237,7 +270,6 @@ void timer2_stop()
     TCCR2B &= ~((1 << CS22) | (1 << CS21) | (1 << CS20)); // stop timer
     TIFR2 |= (1 << OCF2A);
     TCNT2 = 0;
-
 }
 
 
@@ -263,8 +295,9 @@ void go_STATE_MOVEMENT_FORWARD()
 {
     SET_BIT(PORTC, INA_PIN);
     CLEAR_BIT(PORTC, INB_PIN);
-    can_read_ADC = 0;
     timer0_start();
+    current_min = UINT16_MAX;
+    current_max = 0;
 }
 
 void go_STATE_STOP_BACK()
@@ -278,8 +311,9 @@ void go_STATE_MOVEMENT_BACKWARD()
 {
     CLEAR_BIT(PORTC, INA_PIN);
     SET_BIT(PORTC, INB_PIN);
-    can_read_ADC = 0;
     timer0_start();
+    current_min = UINT16_MAX;
+    current_max = 0;
 }
 
 
