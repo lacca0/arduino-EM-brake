@@ -187,8 +187,8 @@ void setup_io()
 void setup_timers()
 {
     //*timer0 for current sense threshold, timed stop*
-    //Normal timer0 mode
-    TCCR0A  = (0 << WGM00) | (0 << WGM01);
+    // CTC timer0 mode
+    TCCR0A  = (1 << WGM01) | (0 << WGM00);
     TCCR0B  = (0 << WGM02)
             | (0 << CS02) | (0 << CS01) | (0 << CS00); // timer stop
     //Output Compare A Match Interrupt Enable
@@ -197,8 +197,8 @@ void setup_timers()
     OCR0A   = (uint8_t)MY_OCR0;
 
     //*timer2 for debounce*
-    //Normal timer2 mode
-    TCCR2A  = (0 << WGM20) | (0 << WGM21);
+    // CTC timer2 mode
+    TCCR2A  = (1 << WGM21) | (0 << WGM20);
     TCCR2B  = (0 << WGM22)
             | (0 << CS22) | (0 << CS21) | (0 << CS20); // timer stop
     //Output compare
