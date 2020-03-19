@@ -33,116 +33,130 @@
 
 static const uint8_t PWM_PIN = PD3;     // PWM output
 
-//static const uint8_t EN_PIN = ADC7;     // A/B switch condition
-static const uint8_t CS_PIN = PC6;     // current detection pin
+//static const uint8_t EN_PIN = ADCL7;     // A/B switch condition
+//static const uint8_t CS_PIN = PC6;     // current detection pin
 static const uint8_t INA_PIN = PC4;    // A switch control pin
 static const uint8_t INB_PIN = PC5;    // B switch control pin
 
 static const uint8_t BUTTON_PIN = PD2;    // the number of the pushbutton pin
 
-uint8_t buttonState = 0;
+volatile uint8_t buttonState = 0;
+//static const uint8_t currentThreshold = 40;
+uint16_t timer0_counter = 0;
+uint16_t timer2_counter = 0;
 
 enum motor_state {
-    STATE_STOP_1,
+    STATE_STOP_BACK,
     STATE_MOVEMENT_FORWARD,
-    STATE_STOP_2,
+    STATE_STOP_FRONT,
     STATE_MOVEMENT_BACKWARD,
 };
 
 const char* motor_state_string[] = {
-        [STATE_STOP_1] = "STATE_STOP_1",
+        [STATE_STOP_BACK] = "STATE_STOP_BACK",
         [STATE_MOVEMENT_FORWARD] = "STATE_MOVEMENT_FORWARD",
-        [STATE_STOP_2] = "STATE_STOP_2",
+        [STATE_STOP_FRONT] = "STATE_STOP_FRONT",
         [STATE_MOVEMENT_BACKWARD] = "STATE_MOVEMENT_BACKWARD",
 };
 
+volatile uint8_t can_read_ADC = 0;
+
 #define MOTOR_GO(new_state) \
 	{ \
-		printf("FSM: -> " #new_state); \
-		printf("\n"); \
+		printf("FSM: %s -> %s , line: %d\n", motor_state_string[motor_state], motor_state_string[new_state], __LINE__); \
 		motor_state = new_state; \
+		go_##new_state(); \
 		break; \
 	}
 
-enum motor_state motor_state;
+volatile enum motor_state motor_state;
 
 
 ISR(INT0_vect) // debounce
 {
-        //TCNT2 = 0;
-        if (PIND & (1 << BUTTON_PIN)) {
-            if (buttonState) {
-                TIMSK2  = (0 << OCIE0A); //Output Compare A Match Interrupt Disable
-                TCNT2   = 0; //timer reset
-                fprintf(stderr, "PIN : 1 BS: \n");
-            }
-            else {
-                TIMSK2  = (1 << OCIE0A); //Output Compare A Match Interrupt Enable
-                TCNT2   = 0; //timer reset
-                fprintf(stderr, "PIN : 1 BS: 0\n");
-            }
+    //TCNT2 = 0;
+    if (PIND & (1 << BUTTON_PIN)) {
+        if (buttonState) {
+            timer2_stop();
         }
         else {
-            if (buttonState) {
-                TCNT2   = 0; //timer reset
-                TIMSK2  = (1 << OCIE0A); //Output Compare A Match Interrupt Enable
-                fprintf(stderr, "PIN : 0 BS: 1\n");
-            }
-            else {
-                TIMSK2  = (0 << OCIE0A); //Output Compare A Match Interrupt Disable
-                TCNT2   = 0; //timer reset
-                fprintf(stderr, "PIN : 0 BS: 0\n");
-            }
-
+            timer2_start();
         }
+    }
+    else {
+        if (buttonState) {
+            timer2_start();
+        }
+        else {
+            timer2_stop();
+        }
+    }
 }
 ISR(TIMER2_COMPA_vect) // debounce
 {
-        static uint16_t cycles_counter = 0;
-        cycles_counter++;
-        if (cycles_counter ==  MS_TO_CLOCKS(50, PRES2 * MY_OCR2)) {
-            cycles_counter = 0;
-            buttonState = !buttonState;
-            TIMSK2  = (0 << OCIE0A); //Output Compare A Match Interrupt Disable
-            TCNT2   = 0; //timer reset
-            fprintf(stderr, "change button state: %d", buttonState);
-            USART_Put_Char(buttonState + '0', stdout);
-            USART_Put_Char('\n', stdout);
+    timer2_counter++;
+    printf("timer2: counter = %d\n", timer2_counter);
+    if (timer2_counter == MS_TO_CLOCKS(50, PRES2 * MY_OCR2)) {
+        buttonState = !buttonState;
+        fprintf(stderr, "change button state: %d\n", buttonState);
+        if (buttonState) {
             switch (motor_state) {
-                case STATE_STOP_1:
+                case STATE_STOP_BACK:
                     MOTOR_GO(STATE_MOVEMENT_FORWARD);
                 case STATE_MOVEMENT_FORWARD:
                     break;
-                case STATE_STOP_2:
+                case STATE_STOP_FRONT:
                     break;
                 case STATE_MOVEMENT_BACKWARD:
                     MOTOR_GO(STATE_MOVEMENT_FORWARD);
             }
+        } else {
+            switch (motor_state) {
+                case STATE_STOP_BACK:
+                    break;
+                case STATE_MOVEMENT_FORWARD:
+                    MOTOR_GO(STATE_MOVEMENT_BACKWARD);
+                case STATE_STOP_FRONT:
+                    MOTOR_GO(STATE_MOVEMENT_BACKWARD);
+                case STATE_MOVEMENT_BACKWARD:
+                    break;
+            }
         }
+        timer2_stop();
+    }
 }
+
 ISR(TIMER0_COMPA_vect) //
 {
-        static uint16_t cycles_counter = 0;
-        if (cycles_counter == (uint16_t)MS_TO_CLOCKS(1000, (uint16_t)PRES0 * MY_OCR0)) {
-            switch (motor_state) {
-                case STATE_STOP_1:
-                    break;
-                case STATE_MOVEMENT_FORWARD:
-                    MOTOR_GO(STATE_STOP_2);
-                case STATE_STOP_2:
-                    break;
-                case STATE_MOVEMENT_BACKWARD:
-                    MOTOR_GO(STATE_STOP_1);
-            }
+    timer0_counter++;
+    printf("timer0: counter = %d\n", timer0_counter);
+    if (timer0_counter == MS_TO_CLOCKS(2000, PRES0 * MY_OCR0)) {
+        switch (motor_state) {
+            case STATE_STOP_BACK:
+                break;
+            case STATE_MOVEMENT_FORWARD:
+                MOTOR_GO(STATE_STOP_FRONT);
+            case STATE_STOP_FRONT:
+                break;
+            case STATE_MOVEMENT_BACKWARD:
+                MOTOR_GO(STATE_STOP_BACK);
         }
-        if (cycles_counter == MS_TO_CLOCKS(500, PRES0 * MY_OCR0)) {
-            switch (motor_state) {
-                case STATE_STOP_1:
-                case STATE_MOVEMENT_FORWARD: MOTOR_GO(STATE_STOP_2);
-                case STATE_STOP_2:
-                case STATE_MOVEMENT_BACKWARD: MOTOR_GO(STATE_STOP_1);
-            }
+        timer0_stop();
+    }
+    if (timer0_counter == MS_TO_CLOCKS(500, PRES0 * MY_OCR0)) {
+        switch (motor_state) {
+            case STATE_STOP_BACK:
+                break;
+            case STATE_MOVEMENT_FORWARD:
+                can_read_ADC = 1;
+                break;
+            case STATE_STOP_FRONT:
+                break;
+            case STATE_MOVEMENT_BACKWARD:
+                can_read_ADC = 1;
+                break;
         }
+    }
 }
 
 ISR(ADC_vect)
@@ -150,7 +164,8 @@ ISR(ADC_vect)
     uint16_t data;
     data    = (ADCH << 8)
             | ADCL;
-    printf("ADC: %d\n", data);
+    (void)data;
+    //printf("ADC: %d\n", data);
 }
 
 void setup_io()
@@ -162,7 +177,7 @@ void setup_io()
             ;
     DDRC    = 0
              // (0 << EN_PIN)
-            | (0 << CS_PIN)
+            //| (0 << CS_PIN)
             | (1 << INA_PIN) | (1 << INB_PIN)
             ;
 
@@ -174,9 +189,9 @@ void setup_timers()
     //Normal timer0 mode
     TCCR0A  = (0 << WGM00) | (0 << WGM01);
     TCCR0B  = (0 << WGM02)
-            | (1 << CS02) | (1 << CS01) | (1 << CS00); // prescaler 1024
+            | (0 << CS02) | (0 << CS01) | (0 << CS00); // timer stop
     //Output Compare A Match Interrupt Enable
-    // TIMSK0   = (1 << OCIE0A);
+    TIMSK0   = (1 << OCIE0A);
     //Output compare
     OCR0A   = (uint8_t)MY_OCR0;
 
@@ -184,20 +199,85 @@ void setup_timers()
     //Normal timer2 mode
     TCCR2A  = (0 << WGM20) | (0 << WGM21);
     TCCR2B  = (0 << WGM22)
-            | (1 << CS02) | (1 << CS01) | (1 << CS00); // prescaler 1024
+            | (0 << CS22) | (0 << CS21) | (0 << CS20); // timer stop
     //Output compare
     OCR2A   = (uint8_t)MY_OCR2;
     //Output Compare A Match Interrupt Enable
-    TIMSK2  = (1 << OCIE0A);
+    TIMSK2  = (1 << OCIE2A);
 }
+
+void timer0_start()
+{
+    printf("timer0: start\n");
+    timer0_counter = 0;
+    TCNT0 = 0;
+    TCCR0B |= ((1 << CS02) | (0 << CS01) | (1 << CS00)); // prescaler 1024
+}
+
+void timer0_stop()
+{
+    printf("timer0: stop\n");
+    TCCR0B &= ~((1 << CS02) | (1 << CS01) | (1 << CS00)); // stop timer
+    TIFR0 |= (1 << OCF0A);
+    TCNT0 = 0;
+}
+
+void timer2_start()
+{
+    printf("timer2: start\n");
+    timer2_counter = 0;
+    TCNT0 = 0;
+    TCCR2B |= ((1 << CS22) | (0 << CS21) | (1 << CS20)); // prescaler 1024
+}
+
+void timer2_stop()
+{
+    printf("timer2: stop\n");
+    TCCR2B &= ~((1 << CS22) | (1 << CS21) | (1 << CS20)); // stop timer
+    TIFR2 |= (1 << OCF2A);
+    TCNT2 = 0;
+
+}
+
 
 void setup_ADC()
 {
     ADMUX   = (1 << REFS1) | (1 << REFS0) // 1.1V reference
-            | (0 << MUX3)  | (1 << MUX2) | (1 << MUX1) | (1 << MUX0); // ADC7
-    ADCSRA  = (1 << ADEN)  | (1 << ADSC) // ADC Enable, start conversion
-            | (1 << ADPS2) | (0 << ADPS1) | (1 << ADPS0); // division factor 32
+            | (0 << MUX3)  | (1 << MUX2) | (1 << MUX1) | (0 << MUX0); // ADC6
+    ADCSRA  = (1 << ADEN)  | (1 << ADSC)  | (1 << ADIE)// ADC Enable, start conversion
+            | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // division factor 32
 }
+
+void go_STATE_STOP_FRONT()
+{
+    CLEAR_BIT(PORTC, INA_PIN);
+    CLEAR_BIT(PORTC, INB_PIN);
+    timer0_stop();
+}
+
+void go_STATE_MOVEMENT_FORWARD()
+{
+    SET_BIT(PORTC, INA_PIN);
+    CLEAR_BIT(PORTC, INB_PIN);
+    can_read_ADC = 0;
+    timer0_start();
+}
+
+void go_STATE_STOP_BACK()
+{
+    CLEAR_BIT(PORTC, INA_PIN);
+    CLEAR_BIT(PORTC, INB_PIN);
+    timer0_stop();
+}
+
+void go_STATE_MOVEMENT_BACKWARD()
+{
+    CLEAR_BIT(PORTC, INA_PIN);
+    SET_BIT(PORTC, INB_PIN);
+    can_read_ADC = 0;
+    timer0_start();
+}
+
 
 int main(void)
 {
@@ -213,23 +293,16 @@ int main(void)
     //Any logical change on INT0 generates an interrupt request.
     EICRA |= (0 << ISC01) | (1 << ISC00);
 
+    SET_BIT(PORTD, PWM_PIN);
+
     setup_timers();
     setup_ADC();
+    motor_state = STATE_STOP_BACK;
+
     sei();
-    fprintf(stdout, "hello ");
-    fprintf(stdout, "world\n");
 
     sleep_enable();
-
     while (true) {
         sleep_cpu();
-
     }
-
-
-
-
-
-
-
 }
