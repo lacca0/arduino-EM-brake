@@ -244,9 +244,12 @@ void timer2_stop()
 void setup_ADC()
 {
     ADMUX   = (1 << REFS1) | (1 << REFS0) // 1.1V reference
-            | (0 << MUX3)  | (1 << MUX2) | (1 << MUX1) | (0 << MUX0); // ADC6
-    ADCSRA  = (1 << ADEN)  | (1 << ADSC)  | (1 << ADIE)// ADC Enable, start conversion
-            | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // division factor 32
+            | (0 << MUX3)  | (1 << MUX2)  | (1 << MUX1) | (0 << MUX0); // ADC6
+    ADCSRA  = (1 << ADEN)
+            | (1 << ADSC)
+            | (1 << ADIE)// ADC Enable, start conversion
+            | (1 << ADATE)
+            | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // prescaler 128
 }
 
 void go_STATE_STOP_FRONT()
