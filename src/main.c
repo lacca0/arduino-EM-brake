@@ -162,10 +162,11 @@ ISR(TIMER0_COMPA_vect) //
 ISR(ADC_vect)
 {
     uint16_t data;
-    data    = (ADCH << 8)
-            | ADCL;
-    (void)data;
-    //printf("ADC: %d\n", data);
+    data  = ADCL;
+    data |= ADCH << 8;
+    if (motor_state == STATE_MOVEMENT_FORWARD || motor_state == STATE_MOVEMENT_BACKWARD) {
+        printf("ADC: %d\n", data);
+    }
 }
 
 void setup_io()
