@@ -19,7 +19,7 @@
 #define PRES2 1024
 #define F_CPU 16000000UL  // 16 MHz
 
-#define BAUD 9600
+#define BAUD 57600
 #define MY_UBRR F_CPU/16/BAUD - 1
 
 #define MS_TO_CLOCKS(ms, PRES)  ((((uint32_t)(ms) * (uint32_t)F_CPU) /  (1000 * (uint32_t)(PRES))))
